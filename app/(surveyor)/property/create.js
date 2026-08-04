@@ -19,7 +19,7 @@ import {
 import Toast from "react-native-toast-message";
 import { WebView } from "react-native-webview";
 import ProtectedRoute from "../../../components/ProtectedRoute";
-import { BACKEND_IP, BACKEND_PORT } from "../../../config";
+import { API_ORIGIN } from "../../../config";
 import {
   useAddBuildingInfoMutation,
   useAddFloorMutation,
@@ -47,7 +47,7 @@ import {
   useGetSubtypesQuery,
 } from "../../../services/typesApi";
 
-const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}`;
+const API_BASE_URL = API_ORIGIN;
 
 // Blank wizard state. Defined once at module scope so the initial value and the
 // "starting a different property" reset can never drift apart.

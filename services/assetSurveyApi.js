@@ -1,6 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BACKEND_IP, BACKEND_PORT } from "../config";
+import { API_BASE_URL } from "../config";
 
 // Custom base query (not RTK Query's fetchBaseQuery) — this app's photo
 // upload needs reliable multipart/form-data handling in React Native, where
@@ -23,7 +23,7 @@ const baseQuery = async (args) => {
       fetchBody = JSON.stringify(body);
     }
 
-    const response = await fetch(`http://${BACKEND_IP}:${BACKEND_PORT}/api/assets${url}`, {
+    const response = await fetch(`${API_BASE_URL}/assets${url}`, {
       method,
       headers,
       body: fetchBody,

@@ -1,4 +1,4 @@
-import { BACKEND_IP, BACKEND_PORT } from "@/config";
+import { API_BASE_URL } from "@/config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createApi } from "@reduxjs/toolkit/query/react";
 
@@ -32,7 +32,7 @@ const baseQuery = async (args, api, extraOptions) => {
       fetchBody = JSON.stringify(body);
     }
 
-    const fullUrl = `http://${BACKEND_IP}:${BACKEND_PORT}/api${url}`;
+    const fullUrl = `${API_BASE_URL}${url}`;
     // console.log(`Request: ${method} ${fullUrl}`);
 
     const response = await fetch(fullUrl, {

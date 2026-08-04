@@ -1,11 +1,11 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BACKEND_IP, BACKEND_PORT } from "../config";
+import { API_BASE_URL } from "../config";
 
 export const authApi = createApi({
   reducerPath: "authApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: `http://${BACKEND_IP}:${BACKEND_PORT}/api`,
+    baseUrl: API_BASE_URL,
     prepareHeaders: async (headers) => {
       const token = await AsyncStorage.getItem("token");
       if (token) headers.set("Authorization", `Bearer ${token}`);

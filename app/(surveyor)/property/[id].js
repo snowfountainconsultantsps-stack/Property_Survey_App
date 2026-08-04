@@ -13,7 +13,7 @@ import {
 import Toast from "react-native-toast-message";
 // import { useDispatch } from "react-redux";
 import ProtectedRoute from "../../../components/ProtectedRoute";
-import { BACKEND_IP, BACKEND_PORT } from "../../../config";
+import { API_ORIGIN } from "../../../config";
 import {
   useGetPropertyPhotosQuery,
   useGetSurveyQuery,
@@ -291,7 +291,7 @@ export default function SurveyDetail() {
       return imageUrl;
     }
     const normalizedPath = imageUrl.startsWith("/") ? imageUrl : `/${imageUrl}`;
-    return `http://${BACKEND_IP}:${BACKEND_PORT}${normalizedPath}`;
+    return `${API_ORIGIN}${normalizedPath}`;
   };
 
   const getImageUrl = (image) => {

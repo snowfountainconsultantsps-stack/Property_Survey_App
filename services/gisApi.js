@@ -1,12 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { BACKEND_IP, BACKEND_PORT } from "../config";
+import { API_BASE_URL } from "../config";
 
 // Create an API slice for GIS operations
 export const gisApi = createApi({
   reducerPath: "gisApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: `http://${BACKEND_IP}:${BACKEND_PORT}/api`,
+    baseUrl: API_BASE_URL,
     prepareHeaders: async (headers, { endpoint }) => {
       const token = await AsyncStorage.getItem("token");
       if (token) {
