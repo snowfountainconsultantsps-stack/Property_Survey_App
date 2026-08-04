@@ -1,0 +1,5 @@
+let BACKEND_IP = '172.20.10.10';
+let BACKEND_PORT = '5000';
+let ENV = 'DEV';
+
+export { BACKEND_IP, BACKEND_PORT, ENV };
