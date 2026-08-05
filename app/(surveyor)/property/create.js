@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import { WebView } from "react-native-webview";
+import DynamicAttributeField from "../../../components/DynamicAttributeField";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import { API_ORIGIN } from "../../../config";
 import {
@@ -43,6 +44,7 @@ import {
 } from "../../../services/surveyApi";
 import {
   useGetCategoriesQuery,
+  useGetTypeConfigsQuery,
   useGetFloorUsageTypesQuery,
   useGetSubtypesQuery,
 } from "../../../services/typesApi";
@@ -235,6 +237,11 @@ export default function MultiStepSurvey() {
 
     clearPhotos();
   }, []);
+
+  // Holds the active PropertyTypeConfig so getPropertyTypeFlags (declared
+  // before the query runs) can read it without a circular dependency.
+  const activeTypeConfigRef = useRef(null);
+
   const getPropertyTypeFlags = () => {
     const selectedCategory = categories?.find(
       (c) => c.id === step1Data.category_id,
@@ -252,30 +259,41 @@ export default function MultiStepSurvey() {
     const isVacant = categoryName === "vacant";
     const isMixedCategory = categoryName === "mixed";
 
-    const isResidentialSingle =
-      isResidential &&
-      (subtypeName.includes("single") || subtypeName === "singlestory");
+    // Prefer the server-declared structural_template. The name matching below
+    // is only a fallback for when the config hasn't loaded yet — it is what
+    // used to drive everything, and it breaks the moment a subtype is renamed.
+    const template = activeTypeConfigRef.current?.structural_template || null;
 
-    const isResidentialMultiStorey =
-      isResidential &&
-      (subtypeName.includes("multi") || subtypeName === "multistory") &&
-      !subtypeName.includes("single");
+    const isResidentialSingle = template
+      ? template === "SINGLE" && isResidential
+      : isResidential &&
+        (subtypeName.includes("single") || subtypeName === "singlestory");
 
-    const isCommercialComplex =
-      isNonResidential &&
-      (subtypeName.includes("complex") || subtypeName === "commercialcomplex");
+    const isResidentialMultiStorey = template
+      ? template === "MULTI" && isResidential
+      : isResidential &&
+        (subtypeName.includes("multi") || subtypeName === "multistory") &&
+        !subtypeName.includes("single");
 
-    // Commercial or PetrolPump
-    const isNonResidentialSimple = isNonResidential && !isCommercialComplex;
+    const isCommercialComplex = template
+      ? template === "MULTI" && isNonResidential
+      : isNonResidential &&
+        (subtypeName.includes("complex") || subtypeName === "commercialcomplex");
+
+    // Commercial or PetrolPump — both are SINGLE-template non-residential.
+    const isNonResidentialSimple = template
+      ? template === "SINGLE" && isNonResidential
+      : isNonResidential && !isCommercialComplex;
 
     return {
       categoryName,
       subtypeName,
+      structuralTemplate: template,
       isResidentialSingle,
       isNonResidentialSimple,
       isResidentialMultiStorey,
       isCommercialComplex,
-      isVacant,
+      isVacant: template ? template === "FLAT" : isVacant,
       isMixed: isMixedCategory,
       isSimpleProperty: isResidentialSingle || isNonResidentialSimple,
     };
@@ -1096,6 +1114,36 @@ export default function MultiStepSurvey() {
   );
   const { data: floorUsageTypes, isLoading: loadingFloorTypes } =
     useGetFloorUsageTypesQuery();
+
+  // Server-declared survey shape + extra questions for each property type.
+  const { data: typeConfigs } = useGetTypeConfigsQuery();
+
+  // The config row for whatever category/subtype is currently selected.
+  // Mixed and Vacant have no subtype, so match on category alone for those.
+  const activeTypeConfig = useMemo(() => {
+    if (!Array.isArray(typeConfigs)) return null;
+    const catId = step1Data.category_id || buildingInfo.category_id;
+    const subId = step1Data.subtype_id;
+    if (!catId) return null;
+    return (
+      typeConfigs.find(
+        (c) =>
+          c.category_id === Number(catId) &&
+          (subId ? c.subtype_id === Number(subId) : c.subtype_id == null),
+      ) || null
+    );
+  }, [typeConfigs, step1Data.category_id, step1Data.subtype_id, buildingInfo.category_id]);
+
+  useEffect(() => {
+    activeTypeConfigRef.current = activeTypeConfig;
+  }, [activeTypeConfig]);
+
+  // Answers to activeTypeConfig.attribute_schema, sent up as
+  // type_specific_attributes and read back by the tax engine.
+  const [typeAttributes, setTypeAttributes] = useState({});
+  const setTypeAttribute = useCallback((key, value) => {
+    setTypeAttributes((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   // What the step-1 map draws. Arriving with a parcel already chosen (tapped on
   // the asset map) means the surveyor has decided — showing the whole city's
@@ -1923,6 +1971,9 @@ if (selectedLayer) {
           bill_photo_url: billPhotoUrl,
           plot_area_sqmt: parseFloat(propertyDetails.plot_area_sqmt),
           ...(!isResidentialMultiStorey ? { utility_connections } : {}),
+          // Answers to this type's schema questions — the tax engine reads
+          // these (e.g. a fuel station's canopy and forecourt areas).
+          type_specific_attributes: typeAttributes,
         },
       }).unwrap();
 
@@ -4993,6 +5044,35 @@ if (selectedLayer) {
     );
   };
 
+  // Renders this property type's extra questions from the server-side schema.
+  // Nothing is hardcoded per category — adding a question to
+  // PropertyTypeConfig.attribute_schema makes it appear here with no release.
+  const renderTypeSpecificQuestions = () => {
+    const schema = activeTypeConfig?.attribute_schema;
+    if (!Array.isArray(schema) || schema.length === 0) return null;
+
+    return (
+      <View className="mt-6 mb-2">
+        <Text className="text-base font-bold text-gray-800 mb-1">
+          {activeTypeConfig.label || "Additional Details"}
+        </Text>
+        <Text className="text-xs text-gray-500 mb-3">
+          Questions specific to this property type
+        </Text>
+        <View className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+          {schema.map((field) => (
+            <DynamicAttributeField
+              key={field.key}
+              field={field}
+              value={typeAttributes[field.key]}
+              onChange={(val) => setTypeAttribute(field.key, val)}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   // ============================================================================
   // RENDER STEPS
   // ============================================================================
@@ -5926,6 +6006,11 @@ if (selectedLayer) {
             )}
           </>
         )}
+
+        {/* Questions specific to this property type, defined server-side in
+            PropertyTypeConfig.attribute_schema. A petrol pump asks about
+            canopy/forecourt here; a vacant plot asks about land use. */}
+        {renderTypeSpecificQuestions()}
 
         <View className="flex-row justify-between mt-4">
           <TouchableOpacity

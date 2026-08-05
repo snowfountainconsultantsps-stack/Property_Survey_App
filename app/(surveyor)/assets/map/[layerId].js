@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -39,17 +39,39 @@ export default function AssetLayerMapScreen() {
   const [ensurePolygon] = useEnsureFeaturePolygonMutation();
 
   // Catalogue metadata (counts, extents) — a few KB regardless of dataset size.
-  const { data: metaRes, isLoading: metaLoading, error: metaError } = useGetAssetMapMetaQuery({
-    status: "PUBLISHED",
-  });
+  const {
+    data: metaRes,
+    isLoading: metaLoading,
+    error: metaError,
+    refetch: refetchMeta,
+  } = useGetAssetMapMetaQuery({ status: "PUBLISHED" });
   const allLayers = metaRes?.layers || [];
   const layer = allLayers.find((l) => String(l.id) === String(layerId));
   const property = isPropertyLayer(layer);
 
   // Geometry for the visible viewport only.
-  const { data: viewRes, isFetching: featuresLoading } = useGetAssetMapViewportQuery(
-    { status: "PUBLISHED", bbox },
-    { skip: !bbox }
+  const {
+    data: viewRes,
+    isFetching: featuresLoading,
+    refetch: refetchViewport,
+  } = useGetAssetMapViewportQuery({ status: "PUBLISHED", bbox }, { skip: !bbox });
+
+  // Survey status (the green/amber/grey colouring) changes while the surveyor
+  // is away on the survey form — and expo-router keeps this screen mounted, so
+  // neither a remount nor RTK Query's cache would pick that up. Refetch every
+  // time the map regains focus so returning from a submitted survey shows it
+  // immediately. `skipFirst` avoids a duplicate request on the initial mount,
+  // where the queries are already loading.
+  const isFirstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      refetchMeta();
+      if (bbox) refetchViewport();
+    }, [refetchMeta, refetchViewport, bbox])
   );
   const viewLayers = viewRes?.layers || [];
   const truncated = Boolean(viewRes?.truncated);
@@ -192,9 +214,6 @@ export default function AssetLayerMapScreen() {
             Too many assets here to draw them all — zoom in to see the rest.
           </Text>
         )}
-        {featuresLoading && !truncated && (
-          <Text style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>Loading this area…</Text>
-        )}
 
         {otherLayers.length > 0 && (
           <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#f3f4f6" }}>
@@ -277,6 +296,9 @@ export default function AssetLayerMapScreen() {
       {isLoading && (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color="#0f2d5c" />
+          <Text style={{ marginTop: 12, color: "#6b7280", fontSize: 13, fontWeight: "500" }}>
+            Loading map…
+          </Text>
         </View>
       )}
 
@@ -290,14 +312,46 @@ export default function AssetLayerMapScreen() {
       )}
 
       {!isLoading && !error && (
-        <NearbyMapView
-          userLocation={null}
-          geojson={geojson}
-          onSelectFeature={handleSelect}
-          onBoundsChange={setBbox}
-          fitExtent={layer?.extent || null}
-          showContextLegend={contextLayerIds.size > 0}
-        />
+        <View style={{ flex: 1 }}>
+          <NearbyMapView
+            userLocation={null}
+            geojson={geojson}
+            onSelectFeature={handleSelect}
+            onBoundsChange={setBbox}
+            fitExtent={layer?.extent || null}
+            showContextLegend={contextLayerIds.size > 0}
+          />
+
+          {/* Parcels for this viewport are still coming. Floating over the map
+              rather than replacing it, so the surveyor keeps their bearings
+              (and can still pan) while the next batch loads. */}
+          {featuresLoading && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: 12,
+                alignSelf: "center",
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "rgba(15,45,92,0.92)",
+                paddingHorizontal: 14,
+                paddingVertical: 9,
+                borderRadius: 20,
+                shadowColor: "#000",
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+            >
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={{ color: "#fff", marginLeft: 8, fontSize: 13, fontWeight: "600" }}>
+                Loading properties…
+              </Text>
+            </View>
+          )}
+        </View>
       )}
 
       {busy && (

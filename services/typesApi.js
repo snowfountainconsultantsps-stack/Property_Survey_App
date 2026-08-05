@@ -84,6 +84,16 @@ export const typesApi = createApi({
       providesTags: ["PropertyTypes"],
     }),
 
+    // Survey shape + extra questions per property type. Replaces the old
+    // string matching on subtype names ("...includes('complex')"): the server
+    // states the structural_template (FLAT/SINGLE/MULTI) and the
+    // attribute_schema outright, so adding a category needs no app release.
+    getTypeConfigs: builder.query({
+      query: () => "/types/config",
+      transformResponse: (response) => response.data,
+      providesTags: ["PropertyTypes"],
+    }),
+
     // Create new category (Admin only)
     createCategory: builder.mutation({
       query: (data) => ({
@@ -148,6 +158,7 @@ export const {
   useGetCategoriesQuery,
   useGetSubtypesQuery,
   useGetFloorUsageTypesQuery,
+  useGetTypeConfigsQuery,
   useCreateCategoryMutation,
   useCreateSubtypeMutation,
   useUpdateCategoryMutation,

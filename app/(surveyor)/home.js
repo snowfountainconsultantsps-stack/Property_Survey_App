@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native";
 import { useSelector } from "react-redux";
 import { useGetAssetMapMetaQuery } from "../../services/assetSurveyApi";
@@ -80,6 +81,20 @@ export default function SurveyorHome() {
   const user = useSelector((state) => state.auth.user);
   const { data, isLoading, isFetching, refetch, error } = useGetAssetMapMetaQuery({ status: "PUBLISHED" });
   const layers = (data?.layers || []).filter((l) => l.feature_count > 0);
+
+  // The per-layer "x of y surveyed" counts go stale as soon as the surveyor
+  // submits something, and this screen stays mounted underneath. Refresh on
+  // focus so returning from a survey shows the new totals.
+  const isFirstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      refetch();
+    }, [refetch])
+  );
 
   if (isLoading) {
     return (
