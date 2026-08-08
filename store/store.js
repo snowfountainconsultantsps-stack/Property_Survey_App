@@ -4,6 +4,7 @@ import { assetSurveyApi } from "../services/assetSurveyApi";
 import { surveyApi } from "../services/surveyApi";
 import { typesApi } from "../services/typesApi";
 import { gisApi } from "../services/gisApi";
+import { assignmentApi } from "../services/assignmentApi";
 import authReducer from "./authSlice";
 
 export const store = configureStore({
@@ -13,6 +14,7 @@ export const store = configureStore({
     [surveyApi.reducerPath]: surveyApi.reducer,
     [typesApi.reducerPath]: typesApi.reducer,
     [gisApi.reducerPath]: gisApi.reducer,
+    [assignmentApi.reducerPath]: assignmentApi.reducer,
     auth: authReducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -21,7 +23,8 @@ export const store = configureStore({
       assetSurveyApi.middleware,
       surveyApi.middleware,
       typesApi.middleware,
-      gisApi.middleware
+      gisApi.middleware,
+      assignmentApi.middleware
     ),
 });
 

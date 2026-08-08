@@ -4,7 +4,87 @@ import { useCallback, useRef } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native";
 import { useSelector } from "react-redux";
 import { useGetAssetMapMetaQuery } from "../../services/assetSurveyApi";
+import { useGetMyAllocationQuery } from "../../services/assignmentApi";
 import { isPropertyLayer } from "../../utils/layerKind";
+
+// What this surveyor has been allocated: project → area → asset type. The
+// layer list below is already restricted to it by the server; this makes the
+// remit explicit so an empty list reads as "nothing assigned to me" rather
+// than "the app is broken".
+function AllocationHeader({ allocation }) {
+  if (!allocation) return null;
+  if (allocation.unrestricted) return null;
+
+  if (!allocation.has_assignment) {
+    return (
+      <View style={{ backgroundColor: "#fef3c7", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+          <MaterialIcons name="warning-amber" size={18} color="#b45309" />
+          <Text style={{ color: "#92400e", fontWeight: "700", marginLeft: 6 }}>No area allocated</Text>
+        </View>
+        <Text style={{ color: "#92400e", fontSize: 12 }}>
+          Your supervisor hasn&apos;t assigned you a project or area yet, so there is nothing to
+          survey. Please check with them.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={{ fontSize: 12, fontWeight: "700", color: "#6b7280", marginBottom: 8, letterSpacing: 0.5 }}>
+        MY ALLOCATION
+      </Text>
+      {(allocation.projects || []).map((p) => (
+        <View
+          key={p.project_id || "none"}
+          style={{ backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 10 }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#0f2d5c" }} numberOfLines={1}>
+                {p.project_name}
+              </Text>
+              {p.project_code ? (
+                <Text style={{ fontSize: 11, color: "#9ca3af" }}>{p.project_code}</Text>
+              ) : null}
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: "#0f2d5c" }}>
+                {p.progress?.percent ?? 0}%
+              </Text>
+              <Text style={{ fontSize: 10, color: "#9ca3af" }}>
+                {p.progress?.surveyed ?? 0}/{p.progress?.total ?? 0} done
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ height: 6, backgroundColor: "#e5e7eb", borderRadius: 3, marginTop: 10, overflow: "hidden" }}>
+            <View
+              style={{
+                height: "100%",
+                width: `${Math.min(100, p.progress?.percent ?? 0)}%`,
+                backgroundColor: (p.progress?.percent ?? 0) >= 75 ? "#16a34a" : (p.progress?.percent ?? 0) >= 40 ? "#f59e0b" : "#ef4444",
+              }}
+            />
+          </View>
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 10, gap: 6 }}>
+            {p.areas.map((a) => (
+              <View key={a.id} style={{ backgroundColor: "#eff6ff", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={{ fontSize: 11, color: "#1d4ed8" }}>{a.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+            To survey: {p.layers.map((l) => l.name).join(", ")}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function LayerRow({ layer, onPress }) {
   const property = isPropertyLayer(layer);
@@ -80,6 +160,7 @@ export default function SurveyorHome() {
   const router = useRouter();
   const user = useSelector((state) => state.auth.user);
   const { data, isLoading, isFetching, refetch, error } = useGetAssetMapMetaQuery({ status: "PUBLISHED" });
+  const { data: allocation, refetch: refetchAllocation } = useGetMyAllocationQuery();
   const layers = (data?.layers || []).filter((l) => l.feature_count > 0);
 
   // The per-layer "x of y surveyed" counts go stale as soon as the surveyor
@@ -93,7 +174,8 @@ export default function SurveyorHome() {
         return;
       }
       refetch();
-    }, [refetch])
+      refetchAllocation();
+    }, [refetch, refetchAllocation])
   );
 
   if (isLoading) {
@@ -116,9 +198,10 @@ export default function SurveyorHome() {
             <Text style={{ fontSize: 16, color: "#374151", fontWeight: "600" }}>
               Hi {user?.full_name || "Surveyor"}
             </Text>
-            <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+            <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 4, marginBottom: 14 }}>
               Pick what to survey, then choose it on the map
             </Text>
+            <AllocationHeader allocation={allocation} />
           </View>
         }
         ListEmptyComponent={
